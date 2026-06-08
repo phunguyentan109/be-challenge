@@ -1,9 +1,9 @@
 import { Prisma } from '@prisma/client';
-import { CloudinaryService } from './cloudinary.service';
 import { MovieRepository } from '../repositories/movie.repository';
 import { CreateMovieData, MovieFilters, MoviePayload, UpdateMoviePayload } from '../types/movie';
 import { HttpStatus } from '../constants/httpStatus';
 import { HttpError } from '../utils/httpError';
+import { MediaUploadService } from './media-upload.service';
 
 export type MovieFiles = {
   image?: Express.Multer.File[];
@@ -13,12 +13,14 @@ export type MovieFiles = {
 export class MovieService {
   constructor(
     private readonly movieRepository: MovieRepository,
-    private readonly cloudinaryService: CloudinaryService,
+    private readonly mediaUploadService: MediaUploadService,
   ) {}
 
   async createMovie(payload: MoviePayload, files?: MovieFiles) {
-    const data = await this.applyUploads(payload, files);
-    return this.movieRepository.create(data as CreateMovieData);
+    const movie = await this.movieRepository.create(payload as CreateMovieData);
+    await this.enqueueUploads(movie.id, files);
+
+    return movie;
   }
 
   listMovies(filters: MovieFilters) {
@@ -36,14 +38,18 @@ export class MovieService {
 
   async updateMovie(id: string, payload: UpdateMoviePayload, files?: MovieFiles) {
     await this.getMovie(id);
-    const data = await this.applyUploads(payload, files);
+    const hasPayload = Object.keys(payload).length > 0;
+    const hasFiles = this.hasUploadFiles(files);
 
-    if (Object.keys(data).length === 0) {
+    if (!hasPayload && !hasFiles) {
       throw new HttpError(HttpStatus.BAD_REQUEST, 'At least one field is required');
     }
 
     try {
-      return await this.movieRepository.update(id, data);
+      const movie = hasPayload ? await this.movieRepository.update(id, payload) : await this.getMovie(id);
+      await this.enqueueUploads(id, files);
+
+      return movie;
     } catch (error) {
       this.handlePrismaError(error);
     }
@@ -59,23 +65,41 @@ export class MovieService {
     }
   }
 
-  private async applyUploads<T extends MoviePayload | UpdateMoviePayload>(
-    payload: T,
-    files: MovieFiles | undefined,
-  ): Promise<T> {
-    const data = { ...payload };
+  private hasUploadFiles(files: MovieFiles | undefined) {
+    return Boolean(files?.image?.[0] || files?.trailerVideo?.[0]);
+  }
+
+  private async enqueueUploads(movieId: string, files: MovieFiles | undefined) {
     const imageFile = files?.image?.[0];
     const trailerFile = files?.trailerVideo?.[0];
 
     if (imageFile) {
-      data.image = await this.cloudinaryService.uploadFile(imageFile, 'image');
+      await this.mediaUploadService.publish({
+        movieId,
+        field: 'image',
+        resourceType: 'image',
+        file: {
+          buffer: imageFile.buffer.toString('base64'),
+          mimetype: imageFile.mimetype,
+          originalname: imageFile.originalname,
+          size: imageFile.size,
+        },
+      });
     }
 
     if (trailerFile) {
-      data.trailerVideo = await this.cloudinaryService.uploadFile(trailerFile, 'video');
+      await this.mediaUploadService.publish({
+        movieId,
+        field: 'trailerVideo',
+        resourceType: 'video',
+        file: {
+          buffer: trailerFile.buffer.toString('base64'),
+          mimetype: trailerFile.mimetype,
+          originalname: trailerFile.originalname,
+          size: trailerFile.size,
+        },
+      });
     }
-
-    return data;
   }
 
   private handlePrismaError(error: unknown): never {

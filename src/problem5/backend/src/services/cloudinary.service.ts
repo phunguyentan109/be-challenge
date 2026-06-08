@@ -17,7 +17,17 @@ export class CloudinaryService {
     return new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(options, (error, result?: UploadApiResponse) => {
         if (error || !result) {
-          reject(new HttpError(HttpStatus.BAD_GATEWAY, 'Failed to upload file to Cloudinary'));
+          const errorMessage =
+            error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+              ? error.message
+              : 'Unknown Cloudinary error';
+
+          reject(
+            new HttpError(
+              HttpStatus.BAD_GATEWAY,
+              `Failed to upload ${resourceType} to Cloudinary: ${errorMessage} (${file.originalname}, ${file.mimetype}, ${file.size} bytes)`,
+            ),
+          );
           return;
         }
 

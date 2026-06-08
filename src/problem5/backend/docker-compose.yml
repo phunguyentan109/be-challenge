@@ -36,6 +36,17 @@ services:
         done
     restart: "no"
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
@@ -43,11 +54,15 @@ services:
     depends_on:
       mongo-init:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     ports:
       - "${PORT:-3000}:3000"
     environment:
       PORT: 3000
       DATABASE_URL: mongodb://mongodb:27017/movie-backend?replicaSet=rs0&directConnection=true
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      MEDIA_UPLOAD_QUEUE: movie-media-upload
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
@@ -55,6 +70,27 @@ services:
       - .:/app
       - /app/node_modules
     command: sh -c "yarn prisma:generate && yarn prisma:push && yarn dev"
+
+  media-worker:
+    build:
+      context: .
+      target: dev
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mongodb://mongodb:27017/movie-backend?replicaSet=rs0&directConnection=true
+      RABBITMQ_URL: amqp://rabbitmq:5672
+      MEDIA_UPLOAD_QUEUE: movie-media-upload
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: sh -c "yarn prisma:generate && yarn prisma:push && yarn dev:worker"
 
 volumes:
   mongodb-data:

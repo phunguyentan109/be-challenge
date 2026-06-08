@@ -1,12 +1,13 @@
 # Movie Backend
 
-TypeScript Express API for managing movies with MongoDB, Prisma, and optional Cloudinary media uploads.
+TypeScript Express API for managing movies with MongoDB, Prisma, RabbitMQ, and asynchronous Cloudinary media uploads.
 
 ## Requirements
 
 - Node.js 20+
 - Yarn
 - MongoDB connection string
+- RabbitMQ
 - Cloudinary account credentials
 
 ## Setup
@@ -24,6 +25,9 @@ DATABASE_URL="mongodb+srv://USER:PASSWORD@HOST/DATABASE?retryWrites=true&w=major
 CLOUDINARY_CLOUD_NAME="your-cloud-name"
 CLOUDINARY_API_KEY="your-api-key"
 CLOUDINARY_API_SECRET="your-api-secret"
+RABBITMQ_URL="amqp://localhost:5672"
+MEDIA_UPLOAD_QUEUE="movie-media-upload"
+MEDIA_UPLOAD_MAX_RETRIES=3
 ```
 
 Generate Prisma client and sync the schema to MongoDB:
@@ -39,11 +43,18 @@ yarn prisma:push
 yarn dev
 ```
 
+Run the media upload worker in a second terminal:
+
+```bash
+yarn dev:worker
+```
+
 Build and run production output:
 
 ```bash
 yarn build
 yarn start
+yarn start:worker
 ```
 
 ## Run With Docker
@@ -62,7 +73,7 @@ Create `.env` from the example and fill Cloudinary credentials if you want to te
 cp .env.example .env
 ```
 
-Run the backend and MongoDB:
+Run the backend, worker, MongoDB, and RabbitMQ:
 
 ```bash
 docker compose up --build
@@ -72,7 +83,9 @@ The dev compose file starts:
 
 - `mongodb`: local MongoDB single-node replica set
 - `mongo-init`: one-time replica set initialization
+- `rabbitmq`: local RabbitMQ broker with management UI on `http://localhost:15672`
 - `backend`: Express app with the source mounted for live reload
+- `media-worker`: background worker that uploads queued image/video files to Cloudinary
 
 The backend container runs:
 
@@ -86,6 +99,7 @@ Useful commands:
 
 ```bash
 docker compose logs -f backend
+docker compose logs -f media-worker
 docker compose down
 docker compose down -v
 ```
@@ -116,13 +130,15 @@ http://localhost:3000/api-docs.json
 
 ```text
 src/
-  config/          Prisma and Cloudinary clients
+  config/          Prisma, RabbitMQ, and Cloudinary clients
   controllers/     HTTP request and response handling
   middleware/      Error and not-found handlers
+  queues/          RabbitMQ publishing contracts
   repositories/    Database access through Prisma
   routes/          Express route definitions
-  services/        Business logic and Cloudinary upload flow
+  services/        Business logic
   types/           Shared TypeScript interfaces
   utils/           Validation and error helpers
   validations/     Resource-specific request validation
+  workers/         Background media upload consumers
 ```
