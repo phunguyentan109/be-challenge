@@ -92,32 +92,6 @@ docker compose down -v
 
 `docker compose down -v` also removes the MongoDB volume.
 
-### Docker Production Build
-
-Build the production image:
-
-```bash
-docker build --target prod -t movie-backend .
-```
-
-Run it with an external MongoDB connection:
-
-```bash
-docker run --rm -p 3000:3000 \
-  -e PORT=3000 \
-  -e DATABASE_URL="mongodb+srv://USER:PASSWORD@HOST/DATABASE?retryWrites=true&w=majority" \
-  -e CLOUDINARY_CLOUD_NAME="your-cloud-name" \
-  -e CLOUDINARY_API_KEY="your-api-key" \
-  -e CLOUDINARY_API_SECRET="your-api-secret" \
-  movie-backend
-```
-
-You can also run the production compose file:
-
-```bash
-docker compose -f docker-compose.prod.yml up --build
-```
-
 ## API
 
 Base URL:
