@@ -358,7 +358,7 @@ sequenceDiagram
 - Add monitoring for suspicious patterns, such as repeated invalid action completions or high completion frequency.
 - Add integration tests for duplicate completions, invalid actions, and concurrent score updates.
 - Consider using SSE first if subscribers only need server-to-subscriber updates; WebSocket is useful if bidirectional realtime features are expected later.
-- For multi-server auto-scaling, use a load balancer or orchestrator such as Kubernetes, ECS, or an auto-scaling group.
+- For auto-scaling, use AWS load balancer, Auto Scaling Group and AWS EC2 for horizontal scaling on virtual machines.
 - If action completion is moved to a separate trusted service later, introduce a short-lived signed `completionToken` so the Scoreboard API can verify completion without sharing the action service database.
 
 Optional future `completionToken` claims:
